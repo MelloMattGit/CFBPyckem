@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Games</title>
+<style>
+    table {
+        border: 1px solid black;
+        border-collapse: collapse;
+    }
+    th, td {
+        border: 1px solid black;
+        padding: 8px;
+    }
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f9;
+        margin: 0;
+        padding: 0;
+    }
+
+    .games-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        padding: 20px;
+    }
+
+    .game-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(to right, var(--team1-color), var(--team2-color));
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 16px;
+        width: 80%;
+        max-width: 600px;
+        color: white;
+    }
+
+    .game-card img {
+        max-width: 80px;
+        filter: drop-shadow(0 0 4px white); /* Add a white glow effect */
+    }
+
+    .game-card h3 {
+        margin: 0 20px;
+        font-size: 1.2em;
+        text-align: center;
+    }
+
+    .game-card h3 span {
+        font-size: 0.8em;
+        color: white;
+        text-align: center;
+    }
+
+    .game-card p {
+        margin: 5px 0;
+        font-size: 0.9em;
+    }
+</style>
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const gameCards = document.querySelectorAll(".game-card");
+        gameCards.forEach(card => {
+            const team1 = card.dataset.team1;
+            const team2 = card.dataset.team2;
+
+            console.log(`Fetching colors for: Team1=${team1}, Team2=${team2}`);
+
+            fetch("/static/data/team_colors.json")
+                .then(response => {
+                    if (!response.ok) {
+                        console.error("Failed to fetch team colors.");
+                        return {};
+                    }
+                    return response.json();
+                })
+                .then(colors => {
+                    const team1Color = colors[team1] || "#F56600";
+                    const team2Color = colors[team2] || "#000000";
+                    console.log(`Colors fetched: ${team1Color} (Team1), ${team2Color} (Team2)`);
+                    card.style.background = `linear-gradient(to right, ${team1Color}, ${team2Color})`;
+                })
+                .catch(error => console.error("Error fetching team colors:", error));
+        });
+    });
+</script>
+</head>
+<body>
+    <header>
+        {% if user %}
+        <div class="user-info" style="position: absolute; top: 10px; left: 10px; display: flex; align-items: center;">
+            <img src="{{ user.avatar_url or '/static/images/redface.png' }}" alt="Avatar" class="avatar" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 10px;">
+            <span>{{ user.username }}</span>
+        </div>
+        {% endif %}
+    </header>
+    <nav>
+        <a href="/games">Games</a>
+    </nav>
+    <h1>Upcoming Games</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Date</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for game in games %}
+            <tr>
+                <td>{{ game.name }}</td>
+                <td>{{ game.date }}</td>
+                <td>{{ game.time }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="games-container">
+        {% for game in games %}
+        <div class="game-card" data-team1="{{ game.team1 }}" data-team2="{{ game.team2 }}">
+            <img src="{{ game.logo1 }}" alt="{{ game.name }} Logo">
+            <h3 style="text-align: center;">
+                {{ game.name }}<br>
+                <span style="font-size: 0.8em;">Date: {{ game.date }} | Time: {{ game.time }}</span>
+            </h3>
+            <img src="{{ game.logo2 }}" alt="{{ game.name }} Logo">
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

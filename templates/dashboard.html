@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pickem - Login</title>
+    <title>Dashboard</title>
     <style>
         :root {
-            --primary-color: #522d80; /* Light Purple */
-            --secondary-color: #f56600; /* White */
+            --primary-color: #d8b9f2; /* Light Purple */
+            --secondary-color: #ffffff; /* White */
             --font-family: Arial, sans-serif;
         }
 
@@ -34,14 +34,13 @@
             text-decoration: underline;
         }
 
-        h1, p {
+        h1, h2, h3, h4, h5, h6 {
             font-family: var(--font-family);
-            text-align: center;
         }
 
         button {
             font-family: var(--font-family);
-            background-color: #333333; /* Fully dark gray */
+            background-color: var(--primary-color);
             color: var(--secondary-color);
             border: none;
             padding: 10px 20px;
@@ -50,15 +49,39 @@
         }
 
         button:hover {
-            background-color: #333333; /* Keep hover color consistent */
+            background-color: #5a0ca0; /* Slightly darker purple */
+        }
+
+        .welcome-text {
+            color: white;
+            font-size: 2em;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .avatar {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            animation: float 3s ease-in-out infinite;
+            cursor: pointer;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-20px);
+            }
         }
     </style>
 </head>
 <body>
-    <h1>Welcome to the Pickem</h1>
-    <p>Login to participate in weekly picks!</p>
-    <a href="/login">
-        <button>Login with Discord</button>
+    <div class="welcome-text">Welcome {{ user.username }}, let's pick</div>
+    <a href="/games">
+        <img src="{{ user.avatar_url or '/static/images/redface.png' }}" alt="Avatar" class="avatar">
     </a>
 </body>
 </html>

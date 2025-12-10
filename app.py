@@ -1,8 +1,9 @@
-from flask import Flask, redirect, request, session, url_for, render_template
+from flask import Flask, logging, redirect, request, session, url_for, render_template
 import requests
 import os
 from dotenv import load_dotenv
 import csv
+import psycopg2
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secret key for session management
@@ -18,6 +19,8 @@ AUTHORIZATION_BASE_URL = f"{DISCORD_API_BASE}/oauth2/authorize"
 TOKEN_URL = f"{DISCORD_API_BASE}/oauth2/token"
 USER_URL = f"{DISCORD_API_BASE}/users/@me"
 
+_logos_cache = None
+
 # Function to load team logos from CSV file
 def load_team_logos():
     logos = {}
@@ -27,7 +30,27 @@ def load_team_logos():
             team_name = row["Team"]
             logo_url = row["Logo"]
             logos[team_name] = logo_url
-    return logos
+    return _logos_cache
+
+import csv
+
+# new function using logos.txt
+def load_logos():
+    global _logos_cache
+    if _logos_cache is None:
+        _logos_cache = {}
+        with open("static/data/logos", mode='r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                id = row['id']
+                _logos_cache[id] = {
+                    'color': row['color'],
+                    'logo': row['logo'],
+                    'dark_logo': row['logos[1]'],
+                    'abbrev': row['abbreviation'],
+                    'mascot': row['mascot']
+                }
+    return _logos_cache
 
 # Home/Welcome/Login page
 @app.route("/")
@@ -79,11 +102,8 @@ def callback():
 # Dashboard page (after login)
 @app.route("/dashboard")
 def dashboard():
-    user = session.get("user")
-    if not user:
-        return redirect(url_for("home"))
-    #Include check later to use a stored name of the user
-    return f"Welcome, {user['username']}! Your Discord ID is {user['id']}. <a href='/games'>Go to Games</a>"
+    user = session.get("user")  # Ensure user data is passed
+    return render_template("dashboard.html", user=user)
 
 # Logout
 @app.route("/logout")
@@ -95,28 +115,58 @@ def logout():
 @app.route("/games")
 def games():
     user = session.get("user")
+    app.logger.info(f"User data: {user}")
     if not user:
         return redirect(url_for("home"))
 
-    team_logos = load_team_logos()
-    teams = {1: ["Clemson", "South Carolina"], 2: ["Alabama", "Auburn"], 3: ["Michigan", "Ohio State"]}
-    games = []
-    for game_id, (team1, team2) in teams.items():
-        games.append({
-            "name": f"{team1} vs {team2}",
-            "date": "2025-12-10",  # Placeholder date
-            "time": "18:00",  # Placeholder time
-            "team1": team1,  # Add team1
-            "team2": team2,  # Add team2
-            "logo1": team_logos.get(team1),
-            "logo2": team_logos.get(team2)
-        })
-    return render_template("games.html", games=games)
+    # Connect to the database
+    conn = psycopg2.connect(**{
+        "dbname": os.getenv("DB_NAME"),
+        "user": os.getenv("DB_USER"),
+        "password": os.getenv("DB_PASSWORD"),
+        "host": os.getenv("DB_HOST"),
+        "port": os.getenv("DB_PORT")
+    })
+    cursor = conn.cursor()
+
+    # Fetch games from the database, excluding those where either team's classification is not 'fbs'
+    cursor.execute("""
+        SELECT match_id, home_id, away_id, date, time, home_class, away_class
+        FROM matchups
+        WHERE home_class = 'fbs' AND away_class = 'fbs';
+    """)
+    rows = cursor.fetchall()
+    logos_data = load_logos()
+
+    # Transform rows into a list of dictionaries
+    games = [
+        {
+            "date": row[3].strftime("%Y-%m-%d"),
+            "time": row[4].strftime("%H:%M"),
+            "homeID": str(row[1]).strip(),
+            "awayID": str(row[2]).strip(),
+            "home_class": row[5],
+            "away_class": row[6]
+        }
+        for row in rows
+    ]
+
+    # Close the database connection
+    cursor.close()
+    conn.close()
+
+    return render_template("games.html", games=games, logos=logos_data)
 
 # Add a context processor to include user data in all templates
 @app.context_processor
 def inject_user():
     user = session.get("user")
+    if user:
+        if user.get('avatar'):
+            user['avatar_url'] = f"https://cdn.discordapp.com/avatars/{user['id']}/{user['avatar']}.png"
+        else:
+            discriminator = int(user.get('discriminator', 0))
+            user['avatar_url'] = f"https://cdn.discordapp.com/embed/avatars/{discriminator % 5}.png"
     return {"user": user}
 
 if __name__ == "__main__":

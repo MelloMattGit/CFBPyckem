@@ -33,11 +33,11 @@ def fetch_last_weeks_games():
     today = datetime.now()
     last_week = today - timedelta(weeks=1)
     year = 2025
-    week = 14  # ISO week number
+    seasonType = "postseason"  # ISO week number
 
     try:
         # Fetch games for last week
-        games = games_api.get_games(year=year, week=week)
+        games = games_api.get_games(year=year)
         print(f"Fetched {len(games)} games")
         return games
     except cfbd.ApiException as e:
@@ -51,8 +51,8 @@ def store_games_in_db(games):
     for game in games:
         try:
             cursor.execute("""
-                INSERT INTO matchups (match_id, team1, team2, date, time, home_class, away_class, home_id, away_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO matchups (match_id, team1, team2, date, time, home_class, away_class, home_id, away_id, week, season, seasonType)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (match_id) DO UPDATE
                 SET team1 = EXCLUDED.team1,
                     team2 = EXCLUDED.team2,
@@ -61,7 +61,10 @@ def store_games_in_db(games):
                     home_class = EXCLUDED.home_class,
                     away_class = EXCLUDED.away_class,
                     home_id = EXCLUDED.home_id,
-                    away_id = EXCLUDED.away_id
+                    away_id = EXCLUDED.away_id,
+                    week = EXCLUDED.week,
+                    season = EXCLUDED.season,
+                    seasonType = EXCLUDED.seasonType;
             """, (
                 game.id,  # Match ID
                 game.home_team,  # Home team
@@ -72,6 +75,9 @@ def store_games_in_db(games):
                 game.away_classification,
                 game.home_id,
                 game.away_id,
+                game.week,
+                game.season,
+                game.season_type
             ))
         except Exception as e:
             print(f"Error storing game {game.id}: {e}")

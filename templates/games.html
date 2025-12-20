@@ -103,6 +103,18 @@
             filter: drop-shadow(0 0 4px white); /* Add a white glow effect */
         }
 
+        .team-logo {
+            cursor: pointer;
+            border-radius: 8px;
+            transition: transform 0.08s ease, box-shadow 0.08s ease;
+        }
+
+        .team-logo.selected {
+            transform: scale(1.06);
+            box-shadow: 0 8px 18px rgba(255,255,255,0.3);
+            outline: 3px solid rgba(255,255,255,0.25);
+        }
+
         .game-card h3 {
             margin: 0 20px;
             font-size: 1.2em;
@@ -118,6 +130,26 @@
         .game-card p {
             margin: 5px 0;
             font-size: 0.9em;
+        }
+        .week-tab {
+            background: transparent;
+            color: white;
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .week-tab.active {
+            background: #1a73e8;
+            color: white;
+            border-color: #1558b0;
+        }
+        /* Disabled submit button styling */
+        #submit-picks-btn[disabled] {
+            background: #7a7a7a !important;
+            color: #eaeaea !important;
+            cursor: not-allowed !important;
+            opacity: 0.9;
         }
     </style>
 
@@ -137,20 +169,163 @@
         </div>
     </header>
     <div class="games-container">
-        {% for game in games %}
-        <div class="game-card" 
-             style="background: linear-gradient(to right, {{ logos[game.awayID].color | default('#F56600') }}, {{ logos[game.homeID].color | default('#000000') }});"
-             data-team1="{{ game.team1 }}" 
-             data-team2="{{ game.team2 }}">
-            <img src="{{ logos[game.awayID].logo }}" alt="{{ logos[game.awayID].abbreviation }} Logo">
+        {% set max_week = None %}
+        {% set max_season = None %}
+        {% for g in games %}
+            {% if max_week is none or (g.week is not none and g.week > max_week) %}
+                {% set max_week = g.week %}
+                {% set max_season = g.season %}
+            {% endif %}
+        {% endfor %}
+        {# build week tabs from backend; include single Postseason tab if present #}
+        <div id="week-tabs" style="width:80%; max-width:800px; margin:0 auto 12px; display:flex; gap:8px; flex-wrap:wrap;">
+            {% for w in weeks|reverse %}
+                <button class="week-tab" data-week="{{ w }}">Week {{ w }}</button>
+            {% endfor %}
+            {% if has_postseason %}
+                <button class="week-tab" data-week="postseason">Postseason</button>
+            {% endif %}
+        </div>
+
+          <div class="contest-header" style="width:80%; max-width:800px; margin:0 auto 12px; color:white; font-size:1.1em; font-weight:600;"></div>
+          {% for game in games %}
+              <div class="game-card" 
+               style="background: linear-gradient(to right, {{ logos[game.awayID].color | default('#F56600') }}, {{ logos[game.homeID].color | default('#000000') }});"
+               data-match-id="{{ game.match_id }}"
+               data-season="{{ game.season }}"
+               data-week="{{ game.week }}"
+               data-season-type="{{ game.seasonType }}"
+               data-team1="{{ game.team1 }}" 
+               data-team2="{{ game.team2 }}">
+            <img class="team-logo" data-match-id="{{ game.match_id }}" data-side="away" data-team-id="{{ game.awayID }}" src="{{ logos[game.awayID].logo }}" alt="{{ logos[game.awayID].abbreviation }} Logo">
             <h3 style="text-align: center;">
                 {{ logos[game.awayID].abbrev }} {{ logos[game.awayID].mascot }} @ {{ logos[game.homeID].abbrev }} {{ logos[game.homeID].mascot }}<br>
                 <span style="font-size: 0.8em;">Date: {{ game.date }} | Time: {{ game.time }}</span> <br>
-                <span style="font-size: 0.8em;">{{ game.home_class }} vs {{ game.away_class }}</span>
+                <span style="font-size: 0.8em;">{{game.week}}</span>
             </h3>
-            <img src="{{ logos[game.homeID].logo }}" alt="{{ logos[game.homeID].abbreviation }} Logo">
+            <img class="team-logo" data-match-id="{{ game.match_id }}" data-side="home" data-team-id="{{ game.homeID }}" src="{{ logos[game.homeID].logo }}" alt="{{ logos[game.homeID].abbreviation }} Logo">
         </div>
         {% endfor %}
+
+        <div style="width:80%; max-width:600px; display:flex; justify-content:center;">
+            <button id="submit-picks-btn" disabled style="margin:20px; padding:10px 18px; border-radius:6px; background:#1a73e8; color:white; border:none; cursor:pointer;">Submit Picks</button>
+        </div>
     </div>
+    <script>
+        (function(){
+            const selections = {};
+            const logos = document.querySelectorAll('.team-logo');
+            const submitBtn = document.getElementById('submit-picks-btn');
+            const gameCards = document.querySelectorAll('.game-card');
+            const totalGames = gameCards.length;
+            // derive contest info from first game card (assumes page shows one contest/week)
+            let contestSeason = null;
+            let contestWeek = null;
+            if(gameCards.length > 0){
+                contestSeason = gameCards[0].dataset.season || null;
+                contestWeek = gameCards[0].dataset.week || null;
+            }
+
+            // week tab handlers
+            const tabButtons = Array.from(document.querySelectorAll('.week-tab'));
+            function setActiveTab(week){
+                tabButtons.forEach(b => b.classList.toggle('active', String(b.dataset.week) === String(week)));
+            }
+            tabButtons.forEach(btn => btn.addEventListener('click', () => {
+                const w = btn.dataset.week;
+                contestWeek = w;
+                // clear previous selections when switching weeks
+                for (const k in selections) { delete selections[k]; }
+                document.querySelectorAll('.team-logo.selected').forEach(el => el.classList.remove('selected'));
+                // show/hide cards
+                gameCards.forEach(c => {
+                    if (w === 'postseason') {
+                        c.style.display = (String(c.dataset.seasonType) === 'postseason') ? '' : 'none';
+                    } else {
+                        c.style.display = (String(c.dataset.week) === String(w)) ? '' : 'none';
+                    }
+                });
+                // update header season/week
+                const first = (w === 'postseason') ? Array.from(gameCards).find(c => String(c.dataset.seasonType) === 'postseason') : Array.from(gameCards).find(c => String(c.dataset.week) === String(w));
+                    if(first){
+                        contestSeason = first.dataset.season || contestSeason;
+                        const header = document.querySelector('.contest-header');
+                        if(header) header.textContent = (w === 'postseason') ? `Postseason -- ${contestSeason}` : `Regular Season -- Week ${w} -- ${contestSeason}`;
+                    }
+                setActiveTab(w);
+                updateSubmitState();
+            }));
+            // default select: use the first game's week (app.py supplies games ordered by most recent)
+            if(tabButtons.length > 0){
+                const defaultWeek = (gameCards.length>0) ? (gameCards[0].dataset.seasonType === 'postseason' ? 'postseason' : gameCards[0].dataset.week) : tabButtons[0].dataset.week;
+                const defaultBtn = tabButtons.find(b => String(b.dataset.week) === String(defaultWeek)) || tabButtons[0];
+                if(defaultBtn){ defaultBtn.click(); }
+            }
+
+            function updateSubmitState(){
+                let visible;
+                if(String(contestWeek) === 'postseason'){
+                    visible = Array.from(gameCards).filter(c => String(c.dataset.seasonType) === 'postseason');
+                } else {
+                    visible = Array.from(gameCards).filter(c => String(c.dataset.week) === String(contestWeek));
+                }
+                const pickedCount = visible.map(c => c.dataset.matchId).filter(id => id in selections).length;
+                submitBtn.disabled = (pickedCount < visible.length);
+            }
+
+            logos.forEach(logo => {
+                logo.addEventListener('click', (e) => {
+                    const el = e.currentTarget;
+                    const matchId = el.dataset.matchId;
+                    const side = el.dataset.side;
+                    const teamId = el.dataset.teamId;
+
+                    if(!matchId) return;
+
+                    // store selection keyed by match id
+                    selections[matchId] = { side: side, teamId: teamId };
+
+                    // visual: remove selected from other logo in same game
+                    const gameContainer = el.closest('.game-card');
+                    if(gameContainer){
+                        gameContainer.querySelectorAll('.team-logo').forEach(img => img.classList.remove('selected'));
+                    }
+                    el.classList.add('selected');
+
+                    updateSubmitState();
+                });
+            });
+
+            submitBtn.addEventListener('click', () => {
+                const payload = Object.keys(selections).sort((a,b)=>a-b).map(matchId => ({ match_id: Number(matchId), team_id: selections[matchId].teamId, side: selections[matchId].side }));
+
+                const body = { picks: payload };
+                if(contestSeason !== null && contestWeek !== null){
+                    body.contest = { season: Number(contestSeason), week: Number(contestWeek), name: `S${contestSeason}W${contestWeek}` };
+                }
+
+                fetch('/submit_picks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    credentials: 'same-origin'
+                }).then(async resp => {
+                    let data = null;
+                    try { data = await resp.json(); } catch(e) { /* not JSON */ }
+                    if(!resp.ok){
+                        console.error('Submit error', resp.status, data);
+                        const msg = data && (data.error || data.detail) ? (data.error || data.detail) : (resp.statusText || 'Unknown error');
+                        alert('Failed to submit picks: ' + msg);
+                        return;
+                    }
+                    // success
+                    alert('Picks submitted.');
+                }).catch(err => {
+                    console.error('Fetch failed', err);
+                    alert('Network or client error: ' + (err && err.message ? err.message : String(err)));
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

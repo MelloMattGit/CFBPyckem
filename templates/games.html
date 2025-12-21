@@ -189,8 +189,10 @@
 
           <div class="contest-header" style="width:80%; max-width:800px; margin:0 auto 12px; color:white; font-size:1.1em; font-weight:600;"></div>
           {% for game in games %}
+              {% set away_color = logos[game.awayID].color | default('#F56600') %}
+              {% set home_color = logos[game.homeID].color | default('#000000') %}
               <div class="game-card" 
-               style="background: linear-gradient(to right, {{ logos[game.awayID].color | default('#F56600') }}, {{ logos[game.homeID].color | default('#000000') }});"
+               data-away-color="{{ away_color }}" data-home-color="{{ home_color }}"
                data-match-id="{{ game.match_id }}"
                data-season="{{ game.season }}"
                data-week="{{ game.week }}"
@@ -218,6 +220,14 @@
             const submitBtn = document.getElementById('submit-picks-btn');
             const gameCards = document.querySelectorAll('.game-card');
             const totalGames = gameCards.length;
+            // apply precomputed colors from data attributes to avoid template syntax inside inline CSS
+            Array.from(gameCards).forEach(c => {
+                const a = c.dataset.awayColor;
+                const h = c.dataset.homeColor;
+                if(a || h){
+                    c.style.background = `linear-gradient(to right, ${a || '#F56600'}, ${h || '#000000'})`;
+                }
+            });
             // derive contest info from first game card (assumes page shows one contest/week)
             let contestSeason = null;
             let contestWeek = null;
